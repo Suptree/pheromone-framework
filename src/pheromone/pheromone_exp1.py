@@ -194,6 +194,36 @@ class Node():
         # distance_to_origin = sqrt(x**2+y**2)
         # if self.is_saved is False and distance_to_origin < 0.05:
         #     self.pheromone.save("foraging_static")
+    def pheromoneCallback(self, message, cargs):
+        # Reading from arguments
+        pose = message.pose[-1]
+        twist = message.twist[-1]
+        pos = pose.position
+        ori = pose.orientation
+        pheromone = cargs
+        x = pos.x
+        y = pos.y
+
+        angles = tf.transformations.euler_from_quaternion(
+            (ori.x, ori.y, ori.z, ori.w))
+        if angles[2] < 0:
+            self.theta = angles[2] + 2*math.pi
+        else:
+            self.theta = angles[2]
+
+        # 9 pheromone values
+        # Position of 9 cells surrounding the robot
+        x_index, y_index = self.posToIndex(x, y)
+        phero_val = Float32MultiArray()
+        for i in range(3):
+            for j in range(3):
+                phero_val.data.append(
+                    self.pheromone.getPhero(x_index+i-1, y_index+j-1))
+        # print("phero_avg: {}".format(np.average(np.asarray(phero_val.data))))
+        self.publish_pheromone.publish(phero_val)
+        # # Assign pheromone value and publish it
+        # phero_val = phero.getPhero(x_index, y_index)
+        # self.pub_phero.publish(phero_val)
         #     self.is_saved = True
         #     self.is_phero_inj = False
 
