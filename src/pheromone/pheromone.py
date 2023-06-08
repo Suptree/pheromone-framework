@@ -1,138 +1,40 @@
-#!/usr/bin/env python3
+#! /usr/bin/env python3
 
-import sys
-
-import roslib
-import os
 import numpy as np
-import tf
-import rospy
 import time
-from std_msgs.msg import Float32MultiArray
-from gazebo_msgs.msg import ModelStates
-# from pheromone.srv import pheromone_injection, pheromone_injection_response
-# from pheromone.srv import pheromone_goal, pheromone_goal_response
-# from pheromone.srv import pheromone_reset, pheromone_reset_response
-import math
-
-
-class Node():
-    def __init__(self, pheromone):
-        self.pheromone = pheromone
-        self.pheromone_max = 1.0
-        self.pheromone_min = 0.0
-        self.is_pheromone_injection = True
-
-        # Publisher & Subscriber
-        self.publish_pheromone = rospy.Publisher('/pheromone_value',
-                                                 Float32MultiArray,
-                                                 queue_size=10)
-        self.subscribe_pose = rospy.Subscriber('/gazebo/model_states',
-                                               ModelStates,
-                                               self.pheromoneCallback,
-                                               self.pheromone)
-
-        # Services
-        # self.srv_injection = rospy.Service('pheromone_injection',
-        #                                    pheromone_injection,
-        #                                    self.injectionAssign)
-        # self.srv_goal = rospy.Service('pheromone_goal',
-        #                               pheromone_goal,
-        #                               self.next_goal)
-        # self.srv_reset = rospy.Service('pheromone_test',
-        #                                pheromone_reset,
-        #                                self.serviceRest)
-
-        self.is_service_requested = False
-        self.theta = 0
-
-        self.log_timer = time.process_time()
-        self.log_file = open("phero_value.txt", "a+")
-        self.is_saved = False
-        self.is_loaded = False
-        self.is_reset = True
-
-        self.pheromone.is_diffusion = True
-        self.pheromone.is_evaporation = False
-        self.start_time = time.time()
-
-    def posToIndex(self, x, y):
-        pheromone = self.pheromone
-
-        resolution = self.pheromone.resolution  # グリッドセルの解像度
-        round_decimal_places = int(math.log10(resolution))
-        x = round(x, round_decimal_places)
-        y = round(y, round_decimal_places)
-        x = int(x*resolution)
-        y = int(y*resolution)
-
-        x_index = int(x + (pheromone.num_cell - 1)/2)
-        y_index = int(y + (pheromone.num_cell - 1)/2)
-
-        if x_index < 0 or y_index < 0 or x_index > pheromone.num_cell-1 \
-                or y_index > pheromone.num_cell-1:
-            raise Exception("The pheromone matrix index is out of range.")
-        return x_index, y_index
-
-    def indexToPos(self, x_index, y_index):
-        '''
-        Convert matrix indices into 2D coordinate (x, y)
-        '''
-        x = x_index - (self.pheromone.num_cell-1)/2
-        y = y_index - (self.pheromone.num_cell-1)/2
-
-        x = float(x) / self.pheromone.resolution
-        y = float(y) / self.pheromone.resolution
-
-        return x, y
-
-    def pheromoneCallback(self, message, cargs):
-        # Reading from arguments
-        pose = message.pose[-1]
-        twist = message.twist[-1]
-        pos = pose.position
-        ori = pose.orientation
-        pheromone = cargs
-        x = pos.x
-        y = pos.y
-
-        angles = tf.transformations.euler_from_quaternion(
-            (ori.x, ori.y, ori.z, ori.w))
-        if angles[2] < 0:
-            self.theta = angles[2] + 2*math.pi
-        else:
-            self.theta = angles[2]
-
-        # 9 pheromone values
-        # Position of 9 cells surrounding the robot
-        x_index, y_index = self.posToIndex(x, y)
-        phero_val = Float32MultiArray()
-        for i in range(3):
-            for j in range(3):
-                phero_val.data.append(
-                    self.pheromone.getPhero(x_index+i-1, y_index+j-1))
-        # print("phero_avg: {}".format(np.average(np.asarray(phero_val.data))))
-        self.publish_pheromone.publish(phero_val)
-        # # Assign pheromone value and publish it
-        # phero_val = phero.getPhero(x_index, y_index)
-        # self.pub_phero.publish(phero_val)
+from pathlib import Path
 
 
 class Pheromone():
 
-    def __init__(self, size=10, res=50, evaporation=0.0, diffusion=0.0):
-        self.resolution = res  # grid cell size = 1 m / resolution
-        self.size = size  # m
-        self.num_cell = self.resolution * self.size + 1
+    def __init__(self, grid_map_size, resolution, evaporation=0.0, diffusion=0.0):
+        # グリッド地図の生成
+        # map size = 1 m * size
+        self.grid_map_size = grid_map_size
+        # grid cell size = 1 m / resolution
+        self.resolution = resolution
+        # 1辺におけるグリッドセルの合計個数
+        self.num_cell = self.resolution * self.grid_map_size + 1
+        # 例外処理 : 一辺におけるグリッドセルの合計個数を必ず奇数でなければならない
         if self.num_cell % 2 == 0:
             raise Exception(
                 "Number of cell is even. It needs to be an odd number")
         self.grid = np.zeros((self.num_cell, self.num_cell))
         self.grid_copy = np.zeros((self.num_cell, self.num_cell))
-        self.evaporation = evaporation  # elapsed seconds for pheromone to be halved
+
+        # 蒸発パラメータの設定
+        self.evaporation = evaporation
+        if self.evaporation == 0.0:
+            self.isEvaporation = False
+        else:
+            self.isEvaporation = True
+
+        # 拡散パラメータの設定
         self.diffusion = diffusion
-        self.isDiffusion = True
-        self.isEvaporation = True
+        if self.diffusion == 0.0:
+            self.isDiffusion = False
+        else:
+            self.isDiffusion = True
 
         # Timers
         self.update_timer = time.process_time()
@@ -141,42 +43,46 @@ class Pheromone():
         self.save_timer = time.process_time()
         self.reset_timer = time.process_time()
 
-        # self.path = path
-
-    def getPhero(self, x, y):
+    # 指定した座標(x, y)からフェロモンを取得
+    def getPheromone(self, x, y):
         return self.grid[x, y]
 
-    def setPhero(self, x, y, value):
+    # 指定した座標(x, y)へフェロモンを配置
+    def setPheromone(self, x, y, value):
         self.grid[x, y] = value
 
-    # Inject pheromone at the robot position and nearby cells in square. Size must be an odd number.
-    def injection(self, x, y, value, size, max):
-        if size % 2 == 0:
+    # 正方形の形でフェロモンの射出する
+    def injection(self, x, y, pheromone_value, injection_size,
+                  max_pheromone_value):
+        # 例外処理 : フェロモンを射出するサイズはかならず奇数
+        if injection_size % 2 == 0:
             raise Exception("Pheromone injection size must be an odd number.")
-        time_cur = time.process_time()
-        if time_cur-self.injection_timer > 0.1:
-            for i in range(size):
-                for j in range(size):
-                    self.grid[x-(size-1)/2+i, y-(size-1)/2+j] += value
-                    if self.grid[x-(size-1)/2+i, y-(size-1)/2+j] >= max:
-                        self.grid[x-(size-1)/2+i, y-(size-1)/2+j] = max
-            self.injection_timer = time_cur
+        # 現在時刻を取得
+        current_time = time.process_time()
+        # フェロモンを射出する間隔を0.1s間隔に設定
+        if current_time - self.injection_timer > 0.1:
+            for i in range(injection_size):
+                for j in range(injection_size):
+                    # 指定した範囲のセルにフェロモンを配置
+                    self.grid[x-(injection_size-1)/2+i,
+                              y-(injection_size-1)/2+j] += pheromone_value
+                    # 配置するフェロモン値がフェロモンの最大値より大きければカット
+                    if self.grid[x-(injection_size-1)/2+i,
+                                 y-(injection_size-1)/2+j] >=\
+                            max_pheromone_value:
+                        self.grid[x-(injection_size-1)/2+i,
+                                  y-(injection_size-1)/2+j] =\
+                            max_pheromone_value
+            # フェロモンを射出した時間を記録
+            self.injection_timer = current_time
 
-    def circle(self, x, y, value, radius):
-        radius = int(radius*self.resolution)
-        for i in range(-radius, radius):
-            for j in range(-radius, radius):
-                if math.sqrt(i**2+j**2) <= radius:
-                    self.grid[x+i, y+j] = value
+    def update(self, min_pheromone_value, max_pheromone_value):
+        current_time = time.process_time()
+        time_elapsed = current_time - self.update_timer
+        self.update_timer = current_time
 
-    # Update all the pheromone values depends on natural phenomena, e.g. evaporation
-
-    def update(self, min, max):
-        time_cur = time.process_time()
-        time_elapsed = time_cur - self.update_timer
-        self.update_timer = time_cur
-
-        if self.isDiffusion == True:
+        # 拡散を行うかどうかの判定
+        if self.isDiffusion is True:
             # Diffusion
             for i in range(self.num_cell):
                 for j in range(self.num_cell):
@@ -189,20 +95,38 @@ class Pheromone():
                         self.grid_copy[i+1, j] += 0.025*self.grid[i, j]
                     if j < self.num_cell-1:
                         self.grid_copy[i, j+1] += 0.025*self.grid[i, j]
-            # self.grid_copy = np.clip(self.grid_copy, a_min = min, a_max = max)
+            # 最大と最小を丸める
+            for i in range(self.num_cell):
+                for j in range(self.num_cell):
+                    if self.grid_copy[i, j] < min_pheromone_value:
+                        self.grid_copy[i, j] = min_pheromone_value
+                    elif self.grid_copy[i, j] > max_pheromone_value:
+                        self.grid_copy[i, j] = max_pheromone_value
+            # グリッドセルを更新
             self.grid = np.copy(self.grid_copy)
+            # 複製したグリッドセルを初期化
             self.grid_copy = np.zeros((self.num_cell, self.num_cell))
-        if self.isEvaporation == True:
-            # evaporation
+
+        # 蒸発を行うかどうかの判定
+        if self.isEvaporation is True:
+            # Evaporation
             decay = 2**(-time_elapsed/self.evaporation)
             for i in range(self.num_cell):
                 for j in range(self.num_cell):
                     self.grid[i, j] = decay * self.grid[i, j]
 
+    def save(self, file_name):
+        parent = Path(__file__).resolve().parent
+        with open(parent.joinpath('pheromone_saved/' +
+                                  file_name + '.pheromone'), 'wb') as f:
+            np.save(f, self.grid)
+        print("The pheromone matrix {} is successfully saved".
+              format(file_name))
 
-
-if __name__ == "__main__":
-    rospy.init_node('pheromone')
-    pheromone = Pheromone()
-    node1 = Node(pheromone=pheromone)
-    rospy.spin()
+    def load(self, file_name):
+        parent = Path(__file__).resolve().parent
+        with open(parent.joinpath('pheromone_saved/' +
+                                  file_name + '.pheromone'), 'rb') as f:
+            self.grid = np.load(f)
+        print("The pheromone matrix {} is successfully loaded".
+              format(file_name))
