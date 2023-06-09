@@ -8,20 +8,27 @@ import numpy as np
 import time
 from pathlib import Path
 
+# import tf
+
 
 class Node():
 
     def __init__(self):
         # pheromonクラスのインスタンス生成
         self.pheromone = Pheromone(
-            grid_map_size=2.0, resolution=50.0, evapolation=0.0, diffusion=0.0)
+            grid_map_size=4, resolution=50, evaporation=0.0, diffusion=0.0)
 
         # フェロモンの最大値と最小値を設定
         self.max_pheromone_value = 1.0
         self.min_pheromone_value = 0.0
 
+        # 経過時間
+        self.start_time = time.process_time()
         # pheromoneの射出を行うかどうか
         # self.is_pheromone_injection = True
+        # オブジェクトの周りにフェロモンを配置
+        # self.pheromone.injectionCircle(
+        # 0.0, 0.4, self.max_pheromone_value, 0.06)
 
         # Publisher & Subscriber
         # フェロモン値を送信
@@ -30,7 +37,6 @@ class Node():
                                                  queue_size=10)
         # gazeboの環境上にあるオブジェクトの状態を取得
         # 取得すると, pheromoneCallback関数が呼び出される
-        rospy.Subscriber()
         self.subscribe_pose = rospy.Subscriber('/gazebo/model_states',
                                                ModelStates,
                                                self.pheromoneCallback)
@@ -63,15 +69,19 @@ class Node():
 
     def pheromoneCallback(self, model_status):
         # Reading from arguments
-        print(model_status.model_name)
-        # pose = message.pose[-1]
-        # twist = message.twist[-1]
-        # pos = pose.position
+        robot_index = model_status.name.index('hero_0')
+        # print(model_status.pose)
+        # print(model_status.twist)
+        pose = model_status.pose[robot_index]
+        # twist = model_status.twist[robot_index]
+        pos = pose.position
         # ori = pose.orientation
-        # pheromone = cargs
-        # x = pos.x
-        # y = pos.y
 
+        obstacle_pos_x = 0.0
+        obstacle_pos_y = 0.4
+        x_index, y_index = self.posToIndex(obstacle_pos_x, obstacle_pos_y)
+        self.pheromone.injectionCircle(
+            x_index, y_index, self.max_pheromone_value, 0.06)
         # angles = tf.transformations.euler_from_quaternion(
         #     (ori.x, ori.y, ori.z, ori.w))
         # if angles[2] < 0:
@@ -79,24 +89,31 @@ class Node():
         # else:
         #     self.theta = angles[2]
 
-        # # 9 pheromone values
-        # # Position of 9 cells surrounding the robot
-        # x_index, y_index = self.posToIndex(x, y)
-        # phero_val = Float32MultiArray()
-        # for i in range(3):
-        #     for j in range(3):
-        #         phero_val.data.append(
-        #             self.pheromone.getPhero(x_index+i-1, y_index+j-1))
-        # # print("phero_avg: {}".format(np.average(np.asarray(phero_val.data))))
-        # self.publish_pheromone.publish(phero_val)
-        # # # Assign pheromone value and publish it
-        # # phero_val = phero.getPhero(x_index, y_index)
-        # # self.pub_phero.publish(phero_val)
+        # 9 pheromone values
+        # Position of 9 cells surrounding the robot
+        print('pos : (x, y) = (' + str(pos.x) + ', ' + str(pos.y) + ')')
+        x_index, y_index = self.posToIndex(pos.x, pos.y)
+        print('pos_index : [x, y] = [' +
+              str(x_index) + ', ' + str(y_index) + ']')
+        pheromone_value = Float32MultiArray()
+        for i in range(3):
+            for j in range(3):
+                pheromone_value.data.append(
+                    self.pheromone.getPheromone(x_index+i-1, y_index+j-1))
+        print(pheromone_value)
+        # print("phero_avg: {}".format(np.average(np.asarray(pheromone_value.data))))
+        self.publish_pheromone.publish(pheromone_value)
+        # # Assign pheromone value and publish it
+        # phero_val = phero.getPhero(x_index, y_index)
+        # self.pub_phero.publish(phero_val)
+
+        # if self.start_time() >= 20:
+        self.pheromone.save("experients_01")
 
 
 class Pheromone():
 
-    def __init__(self, grid_map_size, resolution, evaporation=0.0, diffusion=0.0):
+    def __init__(self, grid_map_size=0, resolution=0, evaporation=0.0, diffusion=0.0):
         # グリッド地図の生成
         # map size = 1 m * size
         self.grid_map_size = grid_map_size
@@ -141,8 +158,8 @@ class Pheromone():
         self.grid[x, y] = value
 
     # 正方形の形でフェロモンの射出する
-    def injection(self, x, y, pheromone_value, injection_size,
-                  max_pheromone_value):
+    def injectionSquare(self, x, y, pheromone_value, injection_size,
+                        max_pheromone_value):
         # 例外処理 : フェロモンを射出するサイズはかならず奇数
         if injection_size % 2 == 0:
             raise Exception("Pheromone injection size must be an odd number.")
@@ -164,6 +181,16 @@ class Pheromone():
                             max_pheromone_value
             # フェロモンを射出した時間を記録
             self.injection_timer = current_time
+
+    def injectionCircle(self, x, y, value, radius):
+        radius = int(radius*self.resolution)
+        for i in range(-radius, radius):
+            for j in range(-radius, radius):
+                if math.sqrt(i**2+j**2) <= radius:
+                    print('sqrt = ' + str(math.sqrt(i**2+j**2)) + ', +radious = ' + str(radius))
+                    print('injection pos_index : [x, y] = [' +
+                          str(x+i) + ', ' + str(y+j) + ']')
+                self.grid[x+i, y+j] = value
 
     def update(self, min_pheromone_value, max_pheromone_value):
         current_time = time.process_time()
@@ -215,7 +242,7 @@ class Pheromone():
     def load(self, file_name):
         parent = Path(__file__).resolve().parent
         with open(parent.joinpath('pheromone_saved/' +
-                                  file_name + '.pheromone'), 'rb') as f:
+                                  file_name + '.npy'), 'rb') as f:
             self.grid = np.load(f)
         print("The pheromone matrix {} is successfully loaded".
               format(file_name))
