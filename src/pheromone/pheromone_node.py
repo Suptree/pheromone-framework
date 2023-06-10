@@ -24,11 +24,32 @@ class Node():
 
         # 経過時間
         self.start_time = time.process_time()
+
         # pheromoneの射出を行うかどうか
         # self.is_pheromone_injection = True
         # オブジェクトの周りにフェロモンを配置
         # self.pheromone.injectionCircle(
         # 0.0, 0.4, self.max_pheromone_value, 0.06)
+        obstacle_pos_x = 0.0
+        obstacle_pos_y = 0.4
+        x_index, y_index = self.posToIndex(obstacle_pos_x, obstacle_pos_y)
+        self.pheromone.injectionCircle(
+            x_index, y_index, self.max_pheromone_value, 0.06)
+        obstacle_pos_x = 0.0
+        obstacle_pos_y = -0.4
+        x_index, y_index = self.posToIndex(obstacle_pos_x, obstacle_pos_y)
+        self.pheromone.injectionCircle(
+            x_index, y_index, self.max_pheromone_value, 0.06)
+        obstacle_pos_x = 0.4
+        obstacle_pos_y = 0.0
+        x_index, y_index = self.posToIndex(obstacle_pos_x, obstacle_pos_y)
+        self.pheromone.injectionCircle(
+            x_index, y_index, self.max_pheromone_value, 0.06)
+        obstacle_pos_x = -0.4
+        obstacle_pos_y = 0.0
+        x_index, y_index = self.posToIndex(obstacle_pos_x, obstacle_pos_y)
+        self.pheromone.injectionCircle(
+            x_index, y_index, self.max_pheromone_value, 0.06)
 
         # Publisher & Subscriber
         # フェロモン値を送信
@@ -77,11 +98,6 @@ class Node():
         pos = pose.position
         # ori = pose.orientation
 
-        obstacle_pos_x = 0.0
-        obstacle_pos_y = 0.4
-        x_index, y_index = self.posToIndex(obstacle_pos_x, obstacle_pos_y)
-        self.pheromone.injectionCircle(
-            x_index, y_index, self.max_pheromone_value, 0.06)
         # angles = tf.transformations.euler_from_quaternion(
         #     (ori.x, ori.y, ori.z, ori.w))
         # if angles[2] < 0:
@@ -91,16 +107,16 @@ class Node():
 
         # 9 pheromone values
         # Position of 9 cells surrounding the robot
-        print('pos : (x, y) = (' + str(pos.x) + ', ' + str(pos.y) + ')')
+        # print('pos : (x, y) = (' + str(pos.x) + ', ' + str(pos.y) + ')')
         x_index, y_index = self.posToIndex(pos.x, pos.y)
-        print('pos_index : [x, y] = [' +
-              str(x_index) + ', ' + str(y_index) + ']')
+        # print('pos_index : [x, y] = [' +
+        #       str(x_index) + ', ' + str(y_index) + ']')
         pheromone_value = Float32MultiArray()
         for i in range(3):
             for j in range(3):
                 pheromone_value.data.append(
                     self.pheromone.getPheromone(x_index+i-1, y_index+j-1))
-        print(pheromone_value)
+        # print(pheromone_value)
         # print("phero_avg: {}".format(np.average(np.asarray(pheromone_value.data))))
         self.publish_pheromone.publish(pheromone_value)
         # # Assign pheromone value and publish it
@@ -187,10 +203,15 @@ class Pheromone():
         for i in range(-radius, radius):
             for j in range(-radius, radius):
                 if math.sqrt(i**2+j**2) <= radius:
-                    print('sqrt = ' + str(math.sqrt(i**2+j**2)) + ', +radious = ' + str(radius))
+                    print('sqrt = ' + str(math.sqrt(i**2+j**2)) +
+                          ', +radious = ' + str(radius))
                     print('injection pos_index : [x, y] = [' +
                           str(x+i) + ', ' + str(y+j) + ']')
                 self.grid[x+i, y+j] = value
+        # circumference = radius * 2.0 * math.pi
+        # split_circle = int(circumference / self.resolution * 100)
+        # for theta in range(0, 360, 360/split_circle):
+        #     print(theta)
 
     def update(self, min_pheromone_value, max_pheromone_value):
         current_time = time.process_time()
@@ -236,19 +257,19 @@ class Pheromone():
         with open(parent.joinpath('pheromone_saved/' +
                                   file_name + '.pheromone'), 'wb') as f:
             np.save(f, self.grid)
-        print("The pheromone matrix {} is successfully saved".
-              format(file_name))
+        # print("The pheromone matrix {} is successfully saved".
+              # format(file_name))
 
     def load(self, file_name):
-        parent = Path(__file__).resolve().parent
+        parent=Path(__file__).resolve().parent
         with open(parent.joinpath('pheromone_saved/' +
                                   file_name + '.npy'), 'rb') as f:
-            self.grid = np.load(f)
+            self.grid=np.load(f)
         print("The pheromone matrix {} is successfully loaded".
               format(file_name))
 
 
 if __name__ == "__main__":
     rospy.init_node('pheromone')
-    node1 = Node()
+    node1=Node()
     rospy.spin()

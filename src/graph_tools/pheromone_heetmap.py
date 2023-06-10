@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
+import seaborn as sns
 
 parent = Path(__file__).resolve().parent
 
@@ -25,7 +26,9 @@ with open(parent.joinpath
     #  [80 81 82 83 84 85 86 87 88 89]
     #  [90 91 92 93 94 95 96 97 98 99]]
 
-fig, ax = plt.subplots()
-im = ax.imshow(data)
-plt.colorbar(im)
+# fig, ax = plt.subplots()
+# im = ax.imshow(data)
+# plt.colorbar(im)
+sns.heatmap(data, linewidth = 0.01)
+# plt.xticks([-200,-150,-100,-50,0,50,100,150,200])
 plt.show()
