@@ -16,7 +16,7 @@ class Node():
     def __init__(self):
         # pheromonクラスのインスタンス生成
         self.pheromone = Pheromone(
-            grid_map_size=4, resolution=50, evaporation=0.0, diffusion=0.0)
+            grid_map_size=4, resolution=10, evaporation=0.0, diffusion=0.0)
 
         # フェロモンの最大値と最小値を設定
         self.max_pheromone_value = 1.0
@@ -30,21 +30,28 @@ class Node():
         # オブジェクトの周りにフェロモンを配置
         # self.pheromone.injectionCircle(
         # 0.0, 0.4, self.max_pheromone_value, 0.06)
+        # self.goal_pos_x = 0.5
+        # self.goal_pos_y = 0.03
+        # x_index, y_index = self.posToIndex(self.goal_pos_x, self.goal_pos_y)
+        # print("Goal Index : ( " + str(x_index) + ", " + str(y_index))
+        # self.pheromone.injectionCircle(
+            # x_index, y_index, self.max_pheromone_value, 0.03)
+
         obstacle_pos_x = 0.0
         obstacle_pos_y = 0.4
         x_index, y_index = self.posToIndex(obstacle_pos_x, obstacle_pos_y)
         self.pheromone.injectionCircle(
-            x_index, y_index, self.max_pheromone_value, 0.06)
+            x_index, y_index, self.max_pheromone_value, 0.3)
         obstacle_pos_x = 0.0
         obstacle_pos_y = -0.4
         x_index, y_index = self.posToIndex(obstacle_pos_x, obstacle_pos_y)
         self.pheromone.injectionCircle(
-            x_index, y_index, self.max_pheromone_value, 0.06)
+            x_index, y_index, self.max_pheromone_value, 0.3)
         obstacle_pos_x = 0.4
         obstacle_pos_y = 0.0
         x_index, y_index = self.posToIndex(obstacle_pos_x, obstacle_pos_y)
         self.pheromone.injectionCircle(
-            x_index, y_index, self.max_pheromone_value, 0.06)
+            x_index, y_index, self.max_pheromone_value, 0.3)
         obstacle_pos_x = -0.4
         obstacle_pos_y = 0.0
         x_index, y_index = self.posToIndex(obstacle_pos_x, obstacle_pos_y)
@@ -65,13 +72,21 @@ class Node():
     # 座標からフェロモングリッドへ変換
     def posToIndex(self, x, y):
         round_decimal_places = int(math.log10(self.pheromone.resolution))
+        # print("round_decimal_places : {}".format(round_decimal_places))
         x = round(x, round_decimal_places)
+        # print("x : {}".format(x))
         y = round(y, round_decimal_places)
+        # print("y : {}".format(y))
         x = int(x*self.pheromone.resolution)
+        # print("x : {}".format(x))
         y = int(y*self.pheromone.resolution)
+        # print("y : {}".format(y))
 
         x_index = int(x + (self.pheromone.num_cell - 1)/2)
         y_index = int(y + (self.pheromone.num_cell - 1)/2)
+        # print("self.pheromone.num_cell : {}".format(self.pheromone.num_cell))
+        # print("x_index : {}".format(x_index))
+        # print("y_index : {}".format(y_index))
 
         if x_index < 0 or y_index < 0 or x_index > self.pheromone.num_cell-1 \
                 or y_index > self.pheromone.num_cell-1:
@@ -110,12 +125,15 @@ class Node():
         # print('pos : (x, y) = (' + str(pos.x) + ', ' + str(pos.y) + ')')
         x_index, y_index = self.posToIndex(pos.x, pos.y)
         # print('pos_index : [x, y] = [' +
-        #       str(x_index) + ', ' + str(y_index) + ']')
+        # str(x_index) + ', ' + str(y_index) + ']')
         pheromone_value = Float32MultiArray()
         for i in range(3):
             for j in range(3):
                 pheromone_value.data.append(
                     self.pheromone.getPheromone(x_index+i-1, y_index+j-1))
+                # print(str(x_index+i-1) + ", " + str(y_index+j-1))
+        self.pheromone.update(0.0, 1.0)
+        # print("pheromone_value : ")
         # print(pheromone_value)
         # print("phero_avg: {}".format(np.average(np.asarray(pheromone_value.data))))
         self.publish_pheromone.publish(pheromone_value)
@@ -207,7 +225,7 @@ class Pheromone():
                           ', +radious = ' + str(radius))
                     print('injection pos_index : [x, y] = [' +
                           str(x+i) + ', ' + str(y+j) + ']')
-                self.grid[x+i, y+j] = value
+                    self.grid[x+i, y+j] = value
         # circumference = radius * 2.0 * math.pi
         # split_circle = int(circumference / self.resolution * 100)
         # for theta in range(0, 360, 360/split_circle):
@@ -258,18 +276,18 @@ class Pheromone():
                                   file_name + '.pheromone'), 'wb') as f:
             np.save(f, self.grid)
         # print("The pheromone matrix {} is successfully saved".
-              # format(file_name))
+            # format(file_name))
 
     def load(self, file_name):
-        parent=Path(__file__).resolve().parent
+        parent = Path(__file__).resolve().parent
         with open(parent.joinpath('pheromone_saved/' +
                                   file_name + '.npy'), 'rb') as f:
-            self.grid=np.load(f)
+            self.grid = np.load(f)
         print("The pheromone matrix {} is successfully loaded".
               format(file_name))
 
 
 if __name__ == "__main__":
     rospy.init_node('pheromone')
-    node1=Node()
+    node1 = Node()
     rospy.spin()

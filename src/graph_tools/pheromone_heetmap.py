@@ -29,6 +29,7 @@ with open(parent.joinpath
 # fig, ax = plt.subplots()
 # im = ax.imshow(data)
 # plt.colorbar(im)
+# sns.heatmap(data)
 sns.heatmap(data, linewidth = 0.01)
 # plt.xticks([-200,-150,-100,-50,0,50,100,150,200])
 plt.show()
